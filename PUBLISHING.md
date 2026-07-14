@@ -15,6 +15,9 @@ Tagged releases are also published automatically by CI (`.github/workflows/relea
 
 Publish **after** the npm package is live — the registry validates that the npm package exists and matches `server.json`.
 
+CI does this automatically (`.github/workflows/mcp-registry-publish.yml`, GitHub OIDC — no
+secrets) whenever `server.json` changes on main. The manual flow below is the fallback.
+
 Install the publisher CLI ([docs](https://github.com/modelcontextprotocol/registry/blob/main/docs/guides/publishing/publish-server.md)):
 
 ```bash
