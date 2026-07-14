@@ -26,8 +26,18 @@ jobs:
         run: |
           curl -sL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/').tar.gz" | tar xz mcp-publisher
 
+      # Skip when this exact version is already in the registry (e.g. it was
+      # published manually) — mirrors the npm-publish skip in release.yml.
       - name: Publish
         run: |
+          name=$(node -p "require('./server.json').name")
+          version=$(node -p "require('./server.json').version")
+          live=$(curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=$name&version=latest" \
+            | node -p "JSON.parse(require('fs').readFileSync(0)).servers.map(s => s.version ?? s.server?.version).join(',')")
+          if [ "$live" = "$version" ]; then
+            echo "$name@$version is already in the registry — skipping publish"
+            exit 0
+          fi
           ./mcp-publisher login github-oidc
           ./mcp-publisher publish
 
