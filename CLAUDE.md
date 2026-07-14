@@ -24,6 +24,11 @@ mcp-connectwise-psa (copied from it) and mcp-itglue — same architecture.
 - `src/tools/registrar.ts` — `ToolRegistrar`; no MCP-level role gating (Graph is the access control)
 - `src/tools/shared.ts` — zod fragments (`responseFormatField`, `topField`), `text/failure/json/clip`
 - `src/tools/{groups,plans,tasks}.ts` — `planner_*` tools
+- `src/tools/advanced.ts` — opt-in escape hatch (`PLANNER_ADVANCED_TOOLSET=true` / `--advanced`, off by default):
+  `graph_get` (read-only GET via the verb-locked `GraphClient.get`, allowlisted to `/planner`, `/groups`,
+  `/users`; `/beta` rejected; a pasted `@odata.nextLink` works as `path` — its inline query is parsed and
+  merged, structured args win) and `graph_find_endpoint` (lexical search over the hand-maintained
+  `src/reference/graph-endpoints.ts`). Search functions kept in sync with mcp-connectwise-psa's `advanced.ts`
 
 ## Graph/Planner gotchas
 

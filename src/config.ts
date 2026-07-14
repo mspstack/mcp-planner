@@ -7,6 +7,11 @@
  *   MS_CLIENT_SECRET App registration client secret (required for stdio)
  *   TRANSPORT        stdio | http (default: stdio)
  *   PORT             HTTP port (default: 3000)
+ *   PLANNER_ADVANCED_TOOLSET
+ *                    true|1 registers the advanced toolset (graph_get /
+ *                    graph_find_endpoint) — also via the --advanced flag.
+ *                    Off by default; the tools are an escape hatch for Graph
+ *                    surface the curated tools don't wrap.
  *
  * Access model: stdio uses the server-wide app credentials above (single local
  * user / single tenant). HTTP sessions each bring their own app credentials
@@ -25,6 +30,8 @@ export interface ServerConfig {
   tenantId: string | undefined;
   clientId: string | undefined;
   clientSecret: string | undefined;
+  /** Register the advanced toolset (graph_get / graph_find_endpoint). */
+  advancedToolset: boolean;
 }
 
 export class ConfigError extends Error {}
@@ -70,5 +77,12 @@ export function loadConfig(
     );
   }
 
-  return { transport, port, tenantId, clientId, clientSecret };
+  // `||` keeps unset/empty/unsubstituted-template values falsy here too
+  const advancedEnv = ((env.PLANNER_ADVANCED_TOOLSET || "").includes("${")
+    ? ""
+    : env.PLANNER_ADVANCED_TOOLSET || ""
+  ).toLowerCase();
+  const advancedToolset = argv.includes("--advanced") || advancedEnv === "true" || advancedEnv === "1";
+
+  return { transport, port, tenantId, clientId, clientSecret, advancedToolset };
 }

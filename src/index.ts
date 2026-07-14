@@ -13,6 +13,8 @@ Usage: mcp-planner [options]
 Options:
   --transport stdio|http   Transport (default: stdio; env TRANSPORT)
   --port <n>               HTTP port (default: 3000; env PORT)
+  --advanced               Register the advanced toolset: graph_get /
+                           graph_find_endpoint (env PLANNER_ADVANCED_TOOLSET)
   --help                   Show this help
 
 Environment:
@@ -41,7 +43,7 @@ function logStartupSummary(config: ServerConfig): void {
 }
 
 async function runStdio(config: ServerConfig): Promise<void> {
-  const server = createServer({
+  const server = createServer(config, {
     label: "stdio",
     credentials: {
       tenantId: config.tenantId!,

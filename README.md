@@ -20,6 +20,10 @@ Sibling project to [mcp-itglue](https://github.com/selic/mcp-itglue) and [mcp-co
 | `planner_update_task` | Update title/bucket/due/priority/progress/assignees |
 | `planner_update_task_details` | Update description; add or (un)check checklist items |
 | `planner_delete_task` | Permanently delete a task |
+| `graph_find_endpoint` † | Search a curated catalog of the /planner, /groups, /users Graph surface |
+| `graph_get` † | Read-only GET for any Graph v1.0 path under /planner, /groups, /users |
+
+† Advanced toolset (opt-in, off by default) — an escape hatch for Graph surface the curated tools don't wrap. Enable with `PLANNER_ADVANCED_TOOLSET=true` or `--advanced`. `graph_get` is verb-locked to GET, rejects `/beta`, and only reaches the three path prefixes above, so a shared app registration's other permissions (e.g. mail) stay out of reach.
 
 ## Setup
 
