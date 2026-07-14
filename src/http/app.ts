@@ -144,7 +144,7 @@ export function createApp(config: ServerConfig): express.Express {
         if (transport.sessionId) sessions.delete(transport.sessionId);
       };
 
-      const server = createServer({ label: auth.label, credentials: auth.credentials });
+      const server = createServer(config, { label: auth.label, credentials: auth.credentials });
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
     })().catch((err) => {
