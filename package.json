@@ -1,6 +1,6 @@
 {
   "name": "mcp-planner",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "MCP server for Microsoft Planner via Microsoft Graph — plans, buckets, and tasks (create, update, assign, complete) with automatic ETag concurrency handling",
   "mcpName": "io.github.mspstack/mcp-planner",
   "type": "module",

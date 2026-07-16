@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "mcp-planner",
   "display_name": "Microsoft Planner",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Microsoft Planner — plans, buckets, and tasks via Microsoft Graph",
   "long_description": "MCP server for Microsoft Planner via the Microsoft Graph API. Find groups and plans, list buckets and tasks, and create, update, assign, complete, or delete tasks — including descriptions and checklists — with Planner's ETag concurrency handled automatically. Uses an Entra ID app registration with application permissions (client-credentials flow).",
   "author": {
