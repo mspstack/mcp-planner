@@ -4,13 +4,18 @@
  *   POST/GET/DELETE /mcp    MCP streamable-http endpoint (BYOK auth)
  *   GET  /health            liveness probe
  *
- * Authentication model — bring-your-own-credentials:
- *  - Every session presents its own Entra app credentials via the
- *    x-ms-tenant-id + x-ms-client-id + x-ms-client-secret headers. Those
- *    credentials are both the credential and the permission model: Microsoft
- *    Graph enforces the app registration's granted application permissions.
- *  - When the server was started with MS_TENANT_ID/MS_CLIENT_ID/MS_CLIENT_SECRET,
- *    sessions may omit the headers and use the server-wide credentials instead.
+ * Authentication model — bring-your-own-credentials, two shapes:
+ *  - App-only: x-ms-tenant-id + x-ms-client-id + x-ms-client-secret
+ *    (client-credentials flow; the app registration's application permissions
+ *    apply, writes are attributed to the app).
+ *  - Delegated: x-ms-tenant-id + x-ms-client-id + x-ms-refresh-token
+ *    (refresh-token grant on a public client; the signed-in USER's permissions
+ *    apply and writes are attributed to them). When both a secret and a
+ *    refresh token arrive, the refresh token wins — header-overlay proxies
+ *    (e.g. the MCP gateway's per-user sessions) can add but not remove headers.
+ *  - When the server was started with MS_TENANT_ID/MS_CLIENT_ID and a secret
+ *    or refresh token, sessions may omit the headers and use the server-wide
+ *    credentials instead.
  *  - The full tool surface is exposed; there is no MCP-level role gating.
  *  - A session id never carries privilege: every request re-authenticates and
  *    must present the same credentials (SHA-256 hash) the session was created with.
@@ -58,11 +63,30 @@ export function resolveAuth(req: Request, config: ServerConfig): AuthOutcome {
   const tenantId = headerValue(req, "x-ms-tenant-id");
   const clientId = headerValue(req, "x-ms-client-id");
   const clientSecret = headerValue(req, "x-ms-client-secret");
+  const refreshToken = headerValue(req, "x-ms-refresh-token");
+
+  // Delegated wins over app-only when both credentials arrive: header-overlay
+  // proxies (the MCP gateway's per-user sessions) can add headers but never
+  // remove the shared spec's, so a placeholder secret may ride along.
+  if (refreshToken) {
+    if (!tenantId || !clientId) {
+      return unauthorized(
+        "x-ms-refresh-token needs x-ms-tenant-id and x-ms-client-id alongside it."
+      );
+    }
+    const keyHash = sha256(`${tenantId}:${clientId}:rt:${refreshToken}`);
+    return {
+      ok: true,
+      label: `byok-user:${keyHash.slice(0, 8)}`,
+      credentials: { tenantId, clientId, refreshToken },
+      keyHash,
+    };
+  }
 
   const provided = [tenantId, clientId, clientSecret].filter(Boolean).length;
   if (provided > 0 && provided < 3) {
     return unauthorized(
-      "All three headers are required together: x-ms-tenant-id, x-ms-client-id, x-ms-client-secret."
+      "Incomplete credentials: send x-ms-tenant-id + x-ms-client-id with either x-ms-client-secret (app-only) or x-ms-refresh-token (delegated)."
     );
   }
 
@@ -76,22 +100,25 @@ export function resolveAuth(req: Request, config: ServerConfig): AuthOutcome {
     };
   }
 
-  if (config.tenantId && config.clientId && config.clientSecret) {
-    const keyHash = sha256(`${config.tenantId}:${config.clientId}:${config.clientSecret}`);
+  if (config.tenantId && config.clientId && (config.clientSecret || config.refreshToken)) {
+    const keyHash = sha256(
+      `${config.tenantId}:${config.clientId}:${config.clientSecret ?? `rt:${config.refreshToken}`}`
+    );
     return {
       ok: true,
       label: "server-env",
       credentials: {
         tenantId: config.tenantId,
         clientId: config.clientId,
-        clientSecret: config.clientSecret,
+        ...(config.clientSecret ? { clientSecret: config.clientSecret } : {}),
+        ...(config.refreshToken ? { refreshToken: config.refreshToken } : {}),
       },
       keyHash,
     };
   }
 
   return unauthorized(
-    "Supply Entra app credentials via the x-ms-tenant-id, x-ms-client-id and x-ms-client-secret headers."
+    "Supply Entra credentials via x-ms-tenant-id + x-ms-client-id plus x-ms-client-secret (app-only) or x-ms-refresh-token (delegated)."
   );
 }
 

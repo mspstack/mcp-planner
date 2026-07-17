@@ -51,7 +51,22 @@ claude mcp add planner --env MS_TENANT_ID=<tenant> --env MS_CLIENT_ID=<client-id
 npx -y mcp-planner --transport http --port 3000
 ```
 
-Sessions authenticate per-request with `x-ms-tenant-id` / `x-ms-client-id` / `x-ms-client-secret` headers (BYOK), or fall back to the `MS_*` environment credentials when set. Health probe at `GET /health`.
+Sessions authenticate per-request (BYOK) with `x-ms-tenant-id` + `x-ms-client-id` plus **either** `x-ms-client-secret` (app-only) **or** `x-ms-refresh-token` (delegated — see below), or fall back to the `MS_*` environment credentials when set. When both a secret and a refresh token arrive, the refresh token wins (header-overlay proxies can add but not remove headers). Health probe at `GET /health`.
+
+### Delegated mode — act as the signed-in user
+
+App-only sessions act as the app registration; delegated sessions act as a **user**: their Planner permissions apply and every write is attributed to them.
+
+1. A separate, **public** app registration: Authentication → *Allow public client flows* → Yes; API permissions → **Delegated** `Tasks.ReadWrite`, `Group.Read.All`, `User.ReadBasic.All` (+ admin consent where the tenant requires it).
+2. Each user signs in once via the device-code helper and keeps the printed refresh token:
+
+```bash
+node scripts/device-login.mjs --tenant <tenant-id> --client <public-client-id>
+```
+
+3. Use `MS_REFRESH_TOKEN` instead of `MS_CLIENT_SECRET` (stdio), or the `x-ms-refresh-token` header (HTTP). Behind the MCP gateway, register it as a personal credential (field `x-ms-refresh-token`).
+
+The refresh token is a secret — it acts as you — and stays valid ~90 days past its last use; re-run the helper when it expires.
 
 ### Docker
 

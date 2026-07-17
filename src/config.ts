@@ -4,7 +4,9 @@
  * Environment variables:
  *   MS_TENANT_ID     Entra ID (Azure AD) tenant id (required for stdio)
  *   MS_CLIENT_ID     App registration client id (required for stdio)
- *   MS_CLIENT_SECRET App registration client secret (required for stdio)
+ *   MS_CLIENT_SECRET App registration client secret (app-only), OR
+ *   MS_REFRESH_TOKEN delegated refresh token (public client; acts as the
+ *                    signed-in user — obtain via scripts/device-login.mjs)
  *   TRANSPORT        stdio | http (default: stdio)
  *   PORT             HTTP port (default: 3000)
  *   PLANNER_ADVANCED_TOOLSET
@@ -26,10 +28,13 @@ export type Transport = "stdio" | "http";
 export interface ServerConfig {
   transport: Transport;
   port: number;
-  /** Server-wide app credentials; used by stdio, absent on HTTP (BYOK). */
+  /** Server-wide credentials; used by stdio, absent on HTTP (BYOK). */
   tenantId: string | undefined;
   clientId: string | undefined;
+  /** App-only (client credentials). Mutually exclusive with refreshToken. */
   clientSecret: string | undefined;
+  /** Delegated (refresh-token grant) — the server acts as the signed-in user. */
+  refreshToken: string | undefined;
   /** Register the advanced toolset (graph_get / graph_find_endpoint). */
   advancedToolset: boolean;
 }
@@ -65,15 +70,24 @@ export function loadConfig(
   const tenantId = env.MS_TENANT_ID || undefined;
   const clientId = env.MS_CLIENT_ID || undefined;
   const clientSecret = env.MS_CLIENT_SECRET || undefined;
+  const refreshToken = env.MS_REFRESH_TOKEN || undefined;
 
-  const provided = [tenantId, clientId, clientSecret].filter(Boolean).length;
-  if (provided > 0 && provided < 3) {
-    throw new ConfigError("MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET must be set together");
+  if (clientSecret && refreshToken) {
+    throw new ConfigError(
+      "Set MS_CLIENT_SECRET (app-only) or MS_REFRESH_TOKEN (delegated), not both"
+    );
+  }
+  const anySet = Boolean(tenantId || clientId || clientSecret || refreshToken);
+  const complete = Boolean(tenantId && clientId && (clientSecret || refreshToken));
+  if (anySet && !complete) {
+    throw new ConfigError(
+      "MS_TENANT_ID and MS_CLIENT_ID must be set together with MS_CLIENT_SECRET or MS_REFRESH_TOKEN"
+    );
   }
 
-  if (transport === "stdio" && !tenantId) {
+  if (transport === "stdio" && !complete) {
     throw new ConfigError(
-      "MS_TENANT_ID / MS_CLIENT_ID / MS_CLIENT_SECRET are required for stdio transport"
+      "MS_TENANT_ID / MS_CLIENT_ID plus MS_CLIENT_SECRET or MS_REFRESH_TOKEN are required for stdio transport"
     );
   }
 
@@ -84,5 +98,5 @@ export function loadConfig(
   ).toLowerCase();
   const advancedToolset = argv.includes("--advanced") || advancedEnv === "true" || advancedEnv === "1";
 
-  return { transport, port, tenantId, clientId, clientSecret, advancedToolset };
+  return { transport, port, tenantId, clientId, clientSecret, refreshToken, advancedToolset };
 }
