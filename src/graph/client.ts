@@ -2,9 +2,15 @@
  * Microsoft Graph client for Planner on the global fetch API.
  *
  * - Base URL: https://graph.microsoft.com/v1.0
- * - Auth: OAuth2 client-credentials flow against
- *   https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token with the
- *   .default scope. Tokens are cached until shortly before expiry.
+ * - Auth, two shapes against
+ *   https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token:
+ *     · app-only  — client-credentials (clientSecret), the app's application
+ *       permissions apply and writes are attributed to the app;
+ *     · delegated — refresh-token grant (refreshToken, public client), the
+ *       signed-in USER's permissions apply and writes are attributed to them.
+ *   Tokens are cached until shortly before expiry. Entra may rotate the
+ *   refresh token on redemption; the successor replaces the stored one for
+ *   the lifetime of this client (i.e. the session).
  * - Planner concurrency: every PATCH/DELETE on planner resources requires an
  *   If-Match header carrying the resource's @odata.etag. `patch`/`delete`
  *   take the etag explicitly; tools fetch the current resource first.
@@ -34,9 +40,9 @@ export function describeError(error: unknown): string {
       case 400:
         return `Error: Bad request.${detail} Check the parameters.`;
       case 401:
-        return "Error: Microsoft Graph authentication failed — check the tenant id, client id and client secret.";
+        return "Error: Microsoft Graph authentication failed — check the tenant id, client id, and the client secret (app-only) or refresh token (delegated; refresh tokens expire after ~90 days of inactivity — sign in again to get a new one).";
       case 403:
-        return `Error: Permission denied.${detail} The app registration may be missing an application permission (Tasks.ReadWrite.All, GroupMember.Read.All, User.Read.All) or admin consent.`;
+        return `Error: Permission denied.${detail} App-only sessions need application permissions with admin consent (Tasks.ReadWrite.All, GroupMember.Read.All, User.Read.All); delegated sessions need the matching delegated scopes (Tasks.ReadWrite, Group.Read.All, User.ReadBasic.All) and the user must have access to the plan.`;
       case 404:
         return "Error: Resource not found. Verify the ID is correct.";
       case 409:
@@ -61,35 +67,52 @@ export function describeError(error: unknown): string {
 export interface GraphCredentials {
   tenantId: string;
   clientId: string;
-  clientSecret: string;
+  /** App-only (client-credentials flow). Exactly one of secret/refreshToken is set. */
+  clientSecret?: string;
+  /** Delegated (refresh-token grant, public client) — acts as the signed-in user. */
+  refreshToken?: string;
 }
 
 interface TokenResponse {
   access_token: string;
   expires_in: number;
+  /** Entra may rotate the refresh token; when present, use the successor. */
+  refresh_token?: string;
 }
 
 export class GraphClient {
   private token: string | undefined;
   private tokenExpiresAt = 0;
+  /** Session-local successor when Entra rotates the delegated refresh token. */
+  private refreshToken: string | undefined;
 
-  constructor(private readonly credentials: GraphCredentials) {}
+  constructor(private readonly credentials: GraphCredentials) {
+    this.refreshToken = credentials.refreshToken;
+  }
 
   private async getToken(): Promise<string> {
     if (this.token && Date.now() < this.tokenExpiresAt - TOKEN_SKEW_MS) return this.token;
 
     const url = `https://login.microsoftonline.com/${this.credentials.tenantId}/oauth2/v2.0/token`;
+    const body = this.refreshToken
+      ? new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: this.credentials.clientId,
+          refresh_token: this.refreshToken,
+          scope: "https://graph.microsoft.com/.default offline_access",
+        })
+      : new URLSearchParams({
+          grant_type: "client_credentials",
+          client_id: this.credentials.clientId,
+          client_secret: this.credentials.clientSecret ?? "",
+          scope: "https://graph.microsoft.com/.default",
+        });
     let response: Response;
     try {
       response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "client_credentials",
-          client_id: this.credentials.clientId,
-          client_secret: this.credentials.clientSecret,
-          scope: "https://graph.microsoft.com/.default",
-        }),
+        body,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch (err) {
@@ -102,17 +125,18 @@ export class GraphClient {
     if (!response.ok) {
       let detail: string | undefined;
       try {
-        const body = (await response.json()) as { error_description?: string; error?: string };
-        detail = body.error_description ?? body.error;
+        const errBody = (await response.json()) as { error_description?: string; error?: string };
+        detail = errBody.error_description ?? errBody.error;
       } catch {
         // non-JSON error body
       }
       throw new GraphApiError("Token request failed", 401, detail);
     }
 
-    const body = (await response.json()) as TokenResponse;
-    this.token = body.access_token;
-    this.tokenExpiresAt = Date.now() + body.expires_in * 1000;
+    const tokens = (await response.json()) as TokenResponse;
+    this.token = tokens.access_token;
+    this.tokenExpiresAt = Date.now() + tokens.expires_in * 1000;
+    if (tokens.refresh_token) this.refreshToken = tokens.refresh_token;
     return this.token;
   }
 

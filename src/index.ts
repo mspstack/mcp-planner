@@ -20,14 +20,18 @@ Options:
 Environment:
   MS_TENANT_ID             Entra ID tenant id (required for stdio)
   MS_CLIENT_ID             App registration client id (required for stdio)
-  MS_CLIENT_SECRET         App registration client secret (required for stdio)
+  MS_CLIENT_SECRET         App registration client secret (app-only), OR
+  MS_REFRESH_TOKEN         delegated refresh token — the server acts as the
+                           signed-in user (obtain via scripts/device-login.mjs)
 
-The app registration needs application permissions with admin consent:
-Tasks.ReadWrite.All, GroupMember.Read.All, User.Read.All.
+App-only needs application permissions with admin consent (Tasks.ReadWrite.All,
+GroupMember.Read.All, User.Read.All). Delegated needs the matching delegated
+scopes on a PUBLIC client (Tasks.ReadWrite, Group.Read.All, User.ReadBasic.All)
+and attributes every write to the signed-in user.
 
-HTTP sessions may authenticate per-request with their own app credentials via
-the x-ms-tenant-id / x-ms-client-id / x-ms-client-secret headers (BYOK), or
-fall back to the MS_* environment credentials when those are set.
+HTTP sessions authenticate per-request (BYOK): x-ms-tenant-id + x-ms-client-id
+plus x-ms-client-secret (app-only) or x-ms-refresh-token (delegated), or fall
+back to the MS_* environment credentials when those are set.
 `;
 
 function logStartupSummary(config: ServerConfig): void {
@@ -37,7 +41,7 @@ function logStartupSummary(config: ServerConfig): void {
     );
   } else {
     console.error(
-      "[auth] HTTP: each session must present x-ms-tenant-id / x-ms-client-id / x-ms-client-secret (BYOK)."
+      "[auth] HTTP: each session must present x-ms-tenant-id + x-ms-client-id plus x-ms-client-secret (app-only) or x-ms-refresh-token (delegated)."
     );
   }
 }
@@ -48,7 +52,8 @@ async function runStdio(config: ServerConfig): Promise<void> {
     credentials: {
       tenantId: config.tenantId!,
       clientId: config.clientId!,
-      clientSecret: config.clientSecret!,
+      ...(config.clientSecret ? { clientSecret: config.clientSecret } : {}),
+      ...(config.refreshToken ? { refreshToken: config.refreshToken } : {}),
     },
   });
   await server.connect(new StdioServerTransport());

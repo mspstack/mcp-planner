@@ -31,6 +31,28 @@ describe("loadConfig", () => {
     ).toThrow(/must be set together/);
   });
 
+  it("accepts a delegated refresh token instead of a client secret", () => {
+    const config = loadConfig([], {
+      MS_TENANT_ID: "tenant",
+      MS_CLIENT_ID: "client",
+      MS_REFRESH_TOKEN: "rt-1",
+    } as NodeJS.ProcessEnv);
+    expect(config.refreshToken).toBe("rt-1");
+    expect(config.clientSecret).toBeUndefined();
+  });
+
+  it("rejects setting both a secret and a refresh token", () => {
+    expect(() =>
+      loadConfig([], { ...FULL_ENV, MS_REFRESH_TOKEN: "rt-1" } as NodeJS.ProcessEnv)
+    ).toThrow(/not both/);
+  });
+
+  it("rejects a refresh token without tenant/client", () => {
+    expect(() =>
+      loadConfig(["--transport", "http"], { MS_REFRESH_TOKEN: "rt-1" } as NodeJS.ProcessEnv)
+    ).toThrow(/must be set together/);
+  });
+
   it("treats empty-string env values as unset (MCPB hosts)", () => {
     const config = loadConfig(["--transport", "http"], {
       MS_TENANT_ID: "",
