@@ -3,7 +3,7 @@
   "name": "io.github.mspstack/mcp-planner",
   "title": "Microsoft Planner",
   "description": "Microsoft Planner MCP server — plans, buckets, tasks via Microsoft Graph, ETags handled",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "repository": {
     "url": "https://github.com/mspstack/mcp-planner",
     "source": "github"
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "mcp-planner",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
